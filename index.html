@@ -79,19 +79,24 @@
     function refresh() {
       document.getElementById("status").textContent = "Fetching victims...";
 
-      fetch(`${SCRIPT_URL}?getVictims=true`, {
-        mode: "no-cors",
-        cache: "no-cache"
-      })
-      .then(response => {
-        console.log("Fetch response object:", response);
-        return response.text();   // Get raw text first
-      })
-      .then(text => {
-        console.log("RAW RESPONSE TEXT FROM SCRIPT:", text.trim().substring(0, 400) + (text.length > 400 ? '...' : ''));
-        console.log("Full response length:", text.length);
-        console.log("SCRIPT_URL used:", SCRIPT_URL);
-        console.log("Navigator online?", navigator.onLine);
+   fetch(`${SCRIPT_URL}?action=get_victims`, { 
+  mode: 'cors',          // ← Key change: remove no-cors
+  cache: 'no-cache' 
+})
+.then(r => r.text())     // ← Start with .text() instead of .json()
+.then(text => {
+  console.log("Raw response from GAS:", text);  // See what actually comes back
+  try {
+    const data = JSON.parse(text);
+    console.log("Parsed JSON:", data);
+  } catch (e) {
+    console.error("JSON parse failed on:", text, e);
+  }
+})
+.catch(err => console.error("Fetch failed:", err));
+
+
+
 
         let victims = [];
         try {
@@ -164,5 +169,4 @@
 
 </body>
 </html>
-
 
